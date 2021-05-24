@@ -124,16 +124,16 @@ let
                         "
 Create a table in XLSX as below, name it Table1:
 
-| FILE_ID | FILE_ID_LEN   | DESC   | DATA_TYPE | OBJECT_NAME | OBJECT_TYPE | IS_LOAD | VERSION |
-|---------|---------------|--------|-----------|-------------|-------------|---------|---------|
-| DT1     | LEN([FILE_ID] | Data 1 | Actual    | Table1      | Table       | YES     |         |
-| DT2     | LEN([FILE_ID] | Data 2 | Actual    | Table1      | Table       | YES     |         |
+| FILE_ID | FILE_ID_LEN   | DESC   | DATA_TYPE | OBJECT_NAME | OBJECT_TYPE | IS_LOAD | VERSION | FIXED_PATH |
+|---------|---------------|--------|-----------|-------------|-------------|---------|---------|------------|
+| DT1     | LEN([FILE_ID] | Data 1 | Actual    | Table1      | Table       | YES     |         | D:\ABC\    |
+| DT2     | LEN([FILE_ID] | Data 2 | Actual    | Table1      | Table       | YES     |         | D:\ABC\    |
 
 Name a cell ""CURRENT_FOLDER_PATH"" with formula =LEFT(CELL(""filename"",$A$1),FIND(""["",CELL(""filename"",$A$1),1)-1)
 
 Call function = XLFilesLoad(""Table1"",""CURRENT_FOLDER_PATH"")
                     ",
-                    Result = "Table as you design"
+                    Result = "Table output will try to auto expand, if it fails you need to manually expand"
                 ]
             }
         ]
