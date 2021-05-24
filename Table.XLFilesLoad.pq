@@ -15,7 +15,8 @@ let
                             "FILE_ID",
                             "FILE_ID_LEN",
                             "OBJECT_NAME",
-                            "OBJECT_TYPE"
+                            "OBJECT_TYPE",
+                            "FIXED_PATH"
                         },
                         {
                             {
@@ -34,7 +35,14 @@ let
                                 __FILE_ID = [FILE_ID],
                                 __OBJ_NAME = [OBJECT_NAME],
                                 __OBJ_TYPE = [OBJECT_TYPE],
-                                __Folder = Folder.Files(Excel.CurrentWorkbook(){[Name = FOLDER_PATH_RANGE]}[Content]{0}[Column1]),
+                                __Fixed_Path = [FIXED_PATH],
+                                __Dynamic_Path = Excel.CurrentWorkbook(){[Name = FOLDER_PATH_RANGE]}[Content]{0}[Column1],
+                                __Path =
+                                    if __Fixed_Path = null or __Fixed_Path = "" then
+                                        __Dynamic_Path
+                                    else
+                                        __Fixed_Path,
+                                __Folder = Folder.Files(__Path),
                                 __FILTER_FOLDER =
                                     Table.SelectRows(
                                         __Folder,
@@ -110,7 +118,8 @@ let
             Documentation.Examples = {
                 [
                     Description = "Replace values on all columns",
-                    Code = "
+                    Code =
+                        "
 Create a table in XLSX as below, name it Table1:
 
 | FILE_ID | FILE_ID_LEN   | DESC   | DATA_TYPE | OBJECT_NAME | OBJECT_TYPE | IS_LOAD | VERSION |
@@ -121,7 +130,8 @@ Create a table in XLSX as below, name it Table1:
 Name a cell ""CURRENT_FOLDER_PATH"" with formula =LEFT(CELL(""filename"",$A$1),FIND(""["",CELL(""filename"",$A$1),1)-1)
 
 Call function = XLFilesLoad(""Table1"",""CURRENT_FOLDER_PATH"")
-                    ",Result = "Table as you design"
+                    ",
+                    Result = "Table as you design"
                 ]
             }
         ]
