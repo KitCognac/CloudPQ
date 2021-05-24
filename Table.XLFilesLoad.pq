@@ -62,14 +62,16 @@ let
                     ),
                 CHOOSE_COLUMNS =
                     let
-                        __LIST_COL_NAMES = List.Buffer(Table.ColumnNames(Table.Combine(LOAD_XL_DATA[FILE_BINARY])))
+                        __LIST_COL_NAMES = List.Buffer(Table.ColumnNames(Table.Combine(LOAD_XL_DATA[FILE_BINARY]))),
+                        __TRY_EXPAND =
+                            Table.ExpandTableColumn(
+                                LOAD_XL_DATA,
+                                "FILE_BINARY",
+                                __LIST_COL_NAMES,
+                                __LIST_COL_NAMES
+                            )
                     in
-                        Table.ExpandTableColumn(
-                            LOAD_XL_DATA,
-                            "FILE_BINARY",
-                            __LIST_COL_NAMES,
-                            __LIST_COL_NAMES
-                        ),
+                        try __TRY_EXPAND otherwise LOAD_XL_DATA,
                 EXPAND_TBL =
                     Table.ExpandTableColumn(
                         CHOOSE_COLUMNS,
