@@ -37,15 +37,34 @@ let
                                 __OBJ_TYPE = [OBJECT_TYPE],
                                 __Fixed_Path = [FIXED_PATH],
                                 __Dynamic_Path = Excel.CurrentWorkbook(){[Name = FOLDER_PATH_RANGE]}[Content]{0}[Column1],
-                                __Path =
+                                __Folder_Path =
                                     if __Fixed_Path = null or __Fixed_Path = "" then
                                         __Dynamic_Path
                                     else
                                         __Fixed_Path,
-                                __Folder = Folder.Files(__Path),
+                                __LOCAL_FOLDER = Folder.Files(__Folder_Path),
+                                __SHAREPOINT_FOLDER =
+                                    Table.SelectRows(
+                                        SharePoint.Files(
+                                            Text.Start(
+                                                __Folder_Path,
+                                                Text.PositionOfAny(
+                                                    __Folder_Path,
+                                                    {"/"},
+                                                    Occurrence.All
+                                                ){4}
+                                                + 1
+                                            )
+                                        ),
+                                        each
+                                            Text.Contains(
+                                                [Folder Path],
+                                                __Folder_Path
+                                            )
+                                    ),
                                 __FILTER_FOLDER =
                                     Table.SelectRows(
-                                        __Folder,
+                                        try __LOCAL_FOLDER otherwise __SHAREPOINT_FOLDER,
                                         each
                                             Text.End([Name], 5 + __FILE_ID_LEN)
                                             = (__FILE_ID & ".xlsx")
