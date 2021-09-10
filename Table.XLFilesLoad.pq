@@ -2,112 +2,236 @@ let
     FUNC =
         (MODULES_TBL as text, FOLDER_PATH_RANGE as text) =>
             let
-                Source = Excel.CurrentWorkbook(){[Name = MODULES_TBL]}[Content],
-                IS_LOAD_FILTER =
+                // Can be Local Path like "C:\GIC\" or Sharepoint like "https://xxxx.sharepoint.com/sites/xxxx/"
+                CurrentFolderPath = Excel.CurrentWorkbook(){[Name = FOLDER_PATH_RANGE]}[Content]{0}[Column1],
+                // Extract Root URL from current Folder Path
+                UDF.SharepointRoot =
+                    (__Folder_Path as text) =>
+                        Table.SelectRows(
+                            SharePoint.Files(
+                                Text.Start(
+                                    __Folder_Path,
+                                    Text.PositionOfAny(
+                                        __Folder_Path,
+                                        {"/"},
+                                        Occurrence.All
+                                    ){4}
+                                    + 1
+                                )
+                            ),
+                            each
+                                Text.Contains(
+                                    [Folder Path],
+                                    __Folder_Path
+                                )
+                        ),
+                // Get List File to be combined infomation
+                FileList = Excel.CurrentWorkbook(){[Name = MODULES_TBL]}[Content],
+                // Filter IS_LOAD = YES
+                FileList.IsLoadOnly =
                     Table.SelectRows(
-                        Source,
+                        FileList,
                         each ([IS_LOAD] = "YES")
                     ),
-                GROUP_DUP_FILES =
+                // Group to File scope. Only download/open files once.
+                FileList.GroupFile =
                     Table.Group(
-                        IS_LOAD_FILTER,
+                        FileList.IsLoadOnly,
                         {
                             "FILE_ID",
                             "FILE_ID_LEN",
-                            "OBJECT_NAME",
-                            "OBJECT_TYPE",
                             "FIXED_PATH"
                         },
                         {
                             {
-                                "TBL",
+                                "FILE_LIST_PROPERTIES",
                                 each _
                             }
                         }
                     ),
-                LOAD_XL_DATA =
+                // Detect if a Fixed Path is configed or use a Dynamic Folder Path
+                FileList.FolderFilePath =
                     Table.AddColumn(
-                        GROUP_DUP_FILES,
-                        "FILE_BINARY",
+                        FileList.GroupFile,
+                        "FOLDER_FILE_PATH",
+                        each
+                            if [FIXED_PATH] = null or [FIXED_PATH] = "" then
+                                CurrentFolderPath
+                            else
+                                [FIXED_PATH]
+                    ),
+                // Detect if path is Folder Path on Sharepoint or on Local Machine
+                FileList.DetectPathType =
+                    Table.AddColumn(
+                        FileList.FolderFilePath,
+                        "PATH_TYPE",
+                        each
+                            if
+                                Text.Start([FOLDER_FILE_PATH], 4)
+                                = "http"
+                            then
+                                if
+                                    Text.Contains(
+                                        [FOLDER_FILE_PATH],
+                                        "sharepoint",
+                                        Comparer.OrdinalIgnoreCase
+                                    )
+                                then
+                                    "SHAREPOINT"
+                                else
+                                    "WEB"
+                            else
+                                "LOCAL"
+                    ),
+                // Open Path using corresponding Path Type
+                FileList.OpenPath =
+                    Table.AddColumn(
+                        FileList.DetectPathType,
+                        "OPEN_PATH",
+                        each
+                            if [PATH_TYPE] = "LOCAL" then
+                                Folder.Files([FOLDER_FILE_PATH])
+                            else if [PATH_TYPE] = "SHAREPOINT" then
+                                UDF.SharepointRoot([FOLDER_FILE_PATH])
+                            else
+                                null
+                    ),
+                // Expand Binary Content and File Names
+                FileList.ExpandFolder =
+                    Table.ExpandTableColumn(
+                        FileList.OpenPath,
+                        "OPEN_PATH",
+                        {
+                            "Content",
+                            "Name"
+                        },
+                        {
+                            "Content",
+                            "Name"
+                        }
+                    ),
+                // Filter Files base on ID in the end of File Name
+                FileList.FilterFiles =
+                    Table.SelectRows(
+                        FileList.ExpandFolder,
+                        each
+                            Text.Contains(
+                                [Name],
+                                [FILE_ID] & ".xlsx",
+                                Comparer.OrdinalIgnoreCase
+                            )
+                    ),
+                // Open Excel File
+                FileList.OpenFile =
+                    Table.AddColumn(
+                        FileList.FilterFiles,
+                        "OPEN_FILE",
+                        each Excel.Workbook([Content])
+                    ),
+                // Expand All Table/Sheet Data in Files
+                FileList.ExpandFileContent =
+                    Table.ExpandTableColumn(
+                        FileList.OpenFile,
+                        "OPEN_FILE",
+                        {
+                            "Data",
+                            "Item",
+                            "Kind"
+                        },
+                        {
+                            "Excel.Data",
+                            "Excel.Item",
+                            "Excel.Kind"
+                        }
+                    ),
+                // Expand Origin FileList Properties
+                FileList.ExpandTargetFilter =
+                    Table.ExpandTableColumn(
+                        FileList.ExpandFileContent,
+                        "FILE_LIST_PROPERTIES",
+                        {
+                            "DESC",
+                            "DATA_TYPE",
+                            "OBJECT_NAME",
+                            "OBJECT_TYPE",
+                            "VERSION"
+                        },
+                        {
+                            "DESC",
+                            "DATA_TYPE",
+                            "OBJECT_NAME",
+                            "OBJECT_TYPE",
+                            "VERSION"
+                        }
+                    ),
+                // Filter Table/Sheet
+                FileList.FilterTarget =
+                    Table.SelectRows(
+                        FileList.ExpandTargetFilter,
+                        each
+                            [OBJECT_NAME]
+                            = [Excel.Item]
+                            and [OBJECT_TYPE]
+                            = [Excel.Kind]
+                    ),
+                // Filter Columns needed
+                FileList.FilterColumns =
+                    Table.SelectColumns(
+                        FileList.FilterTarget,
+                        {
+                            "FILE_ID",
+                            "DESC",
+                            "DATA_TYPE",
+                            "VERSION",
+                            "Excel.Data"
+                        }
+                    ),
+                // Add FILE ID, DESC, etc to final Table result
+                FileList.AddFileProperties =
+                    Table.AddColumn(
+                        FileList.FilterColumns,
+                        "Excel.DataModified",
                         each
                             let
-                                __FILE_ID_LEN = [FILE_ID_LEN],
-                                __FILE_ID = [FILE_ID],
-                                __OBJ_NAME = [OBJECT_NAME],
-                                __OBJ_TYPE = [OBJECT_TYPE],
-                                __Fixed_Path = [FIXED_PATH],
-                                __Dynamic_Path = Excel.CurrentWorkbook(){[Name = FOLDER_PATH_RANGE]}[Content]{0}[Column1],
-                                __Folder_Path =
-                                    if __Fixed_Path = null or __Fixed_Path = "" then
-                                        __Dynamic_Path
-                                    else
-                                        __Fixed_Path,
-                                __LOCAL_FOLDER = Folder.Files(__Folder_Path),
-                                __SHAREPOINT_FOLDER =
-                                    Table.SelectRows(
-                                        SharePoint.Files(
-                                            Text.Start(
-                                                __Folder_Path,
-                                                Text.PositionOfAny(
-                                                    __Folder_Path,
-                                                    {"/"},
-                                                    Occurrence.All
-                                                ){4}
-                                                + 1
-                                            )
-                                        ),
-                                        each
-                                            Text.Contains(
-                                                [Folder Path],
-                                                __Folder_Path
-                                            )
-                                    ),
-                                __FILTER_FOLDER =
-                                    Table.SelectRows(
-                                        try __LOCAL_FOLDER otherwise __SHAREPOINT_FOLDER,
-                                        each
-                                            Text.End([Name], 5 + __FILE_ID_LEN)
-                                            = (__FILE_ID & ".xlsx")
-                                    ),
-                                __OpenExcel = Excel.Workbook(__FILTER_FOLDER[Content]{0}),
-                                __Get_Model_Input =
-                                    __OpenExcel{[
-                                        Item = __OBJ_NAME,
-                                        Kind = __OBJ_TYPE
-                                    ]}
-                                        [Data]
+                                _prop =
+                                    Record.SelectFields(
+                                        _,
+                                        {
+                                            "FILE_ID",
+                                            "DESC",
+                                            "DATA_TYPE",
+                                            "VERSION"
+                                        }
+                                    )
                             in
-                                try __Get_Model_Input otherwise null
+                                Table.AddColumn(
+                                    [Excel.Data],
+                                    "FILE_PROPERTIES",
+                                    each _prop
+                                )
                     ),
-                CHOOSE_COLUMNS =
-                    let
-                        __LIST_COL_NAMES = List.Buffer(Table.ColumnNames(Table.Combine(LOAD_XL_DATA[FILE_BINARY]))),
-                        __TRY_EXPAND =
-                            Table.ExpandTableColumn(
-                                LOAD_XL_DATA,
-                                "FILE_BINARY",
-                                __LIST_COL_NAMES,
-                                __LIST_COL_NAMES
-                            )
-                    in
-                        try __TRY_EXPAND otherwise LOAD_XL_DATA,
-                EXPAND_TBL =
-                    Table.ExpandTableColumn(
-                        CHOOSE_COLUMNS,
-                        "TBL",
+                // Combine all Table from Excel Files
+                FileList.CombineAll = Table.Combine(FileList.AddFileProperties[Excel.DataModified]),
+                // Expand File ID from FileList
+                FileList.ExpandFileProperties =
+                    Table.ExpandRecordColumn(
+                        FileList.CombineAll,
+                        "FILE_PROPERTIES",
                         {
+                            "FILE_ID",
                             "DESC",
                             "DATA_TYPE",
                             "VERSION"
                         },
                         {
+                            "FILE_ID",
                             "DESC",
                             "DATA_TYPE",
                             "VERSION"
                         }
                     )
             in
-                EXPAND_TBL,
+                FileList.ExpandFileProperties,
     META =
         type function (//
         MODULES_TBL as
