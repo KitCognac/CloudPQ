@@ -1,6 +1,6 @@
 let
     FUNC =
-        (MODULES_TBL as text, FOLDER_PATH_RANGE as text) =>
+        (MODULES_TBL as text, FOLDER_PATH_RANGE as text, INCLUDE_FILE_META as logical) =>
             let
                 // Can be Local Path like "C:\GIC\" or Sharepoint like "https://xxxx.sharepoint.com/sites/xxxx/"
                 CurrentFolderPath = Excel.CurrentWorkbook(){[Name = FOLDER_PATH_RANGE]}[Content]{0}[Column1],
@@ -204,34 +204,42 @@ let
                                         }
                                     )
                             in
-                                Table.AddColumn(
-                                    [Excel.Data],
+                                Table.ExpandRecordColumn(
+                                    Table.AddColumn(
+                                        [Excel.Data],
+                                        "FILE_PROPERTIES",
+                                        each _prop
+                                    ),
                                     "FILE_PROPERTIES",
-                                    each _prop
+                                    {
+                                        "FILE_ID",
+                                        "DESC",
+                                        "DATA_TYPE",
+                                        "VERSION"
+                                    },
+                                    {
+                                        "FILE_ID",
+                                        "DESC",
+                                        "DATA_TYPE",
+                                        "VERSION"
+                                    }
                                 )
                     ),
+                // Include or not include File Meta in Output
+                FileList.DataSwitch =
+                    Table.AddColumn(
+                        FileList.AddFileProperties,
+                        "Excel.DataFinal",
+                        each
+                            if INCLUDE_FILE_META = true then
+                                [Excel.DataModified]
+                            else
+                                [Excel.Data]
+                    ),
                 // Combine all Table from Excel Files
-                FileList.CombineAll = Table.Combine(FileList.AddFileProperties[Excel.DataModified]),
-                // Expand File ID from FileList
-                FileList.ExpandFileProperties =
-                    Table.ExpandRecordColumn(
-                        FileList.CombineAll,
-                        "FILE_PROPERTIES",
-                        {
-                            "FILE_ID",
-                            "DESC",
-                            "DATA_TYPE",
-                            "VERSION"
-                        },
-                        {
-                            "FILE_ID",
-                            "DESC",
-                            "DATA_TYPE",
-                            "VERSION"
-                        }
-                    )
+                FileList.CombineAll = Table.Combine(FileList.DataSwitch[Excel.DataFinal])
             in
-                FileList.ExpandFileProperties,
+                FileList.CombineAll,
     META =
         type function (//
         MODULES_TBL as
@@ -254,6 +262,20 @@ let
                         "CURRENT_FOLDER_PATH"
                     }
                 ]
+            ), INCLUDE_FILE_META as
+            (
+                type logical
+                meta
+                [
+                    Documentation.FieldCaption = "Range Name have Current Folder Path",
+                    Documentation.SampleValues = {
+                        "true/false"
+                    },
+                    Documentation.AllowedValues = {
+                        true,
+                        false
+                    }
+                ]
             )) as table
         meta
         [
@@ -274,9 +296,9 @@ Create a table in XLSX as below, name it Table1:
 
 Name a cell ""CURRENT_FOLDER_PATH"" with formula =LEFT(CELL(""filename"",$A$1),FIND(""["",CELL(""filename"",$A$1),1)-1)
 
-Call function = XLFilesLoad(""Table1"",""CURRENT_FOLDER_PATH"")
+Call function = XLFilesLoad(""Table1"",""CURRENT_FOLDER_PATH"",true)
                     ",
-                    Result = "Table output will try to auto expand, if it fails you need to manually expand"
+                    Result = "Table output will auto combine all tables"
                 ]
             }
         ]
