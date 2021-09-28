@@ -200,6 +200,7 @@ let
                                             "FILE_ID",
                                             "DESC",
                                             "DATA_TYPE",
+                                            "OBJECT_NAME",
                                             "VERSION"
                                         }
                                     )
@@ -215,12 +216,14 @@ let
                                         "FILE_ID",
                                         "DESC",
                                         "DATA_TYPE",
+                                        "OBJECT_NAME",
                                         "VERSION"
                                     },
                                     {
                                         "FILE_ID",
                                         "DESC",
                                         "DATA_TYPE",
+                                        "OBJECT_NAME",
                                         "VERSION"
                                     }
                                 )
