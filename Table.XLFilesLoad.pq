@@ -3,7 +3,7 @@ let
         (MODULES_TBL as text, FOLDER_PATH_RANGE as text, INCLUDE_FILE_META as logical) =>
             let
                 // Can be Local Path like "C:\GIC\" or Sharepoint like "https://xxxx.sharepoint.com/sites/xxxx/"
-                CurrentFolderPath = Excel.CurrentWorkbook(){[Name = FOLDER_PATH_RANGE]}[Content]{0}[Column1],
+                CurrentFolderPath = try Excel.CurrentWorkbook(){[Name = FOLDER_PATH_RANGE]}[Content]{0}[Column1] otherwise FOLDER_PATH_RANGE,
                 // Extract Root URL from current Folder Path
                 UDF.SharepointRoot =
                     (__Folder_Path as text) =>
